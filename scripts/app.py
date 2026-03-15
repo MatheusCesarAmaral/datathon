@@ -9,6 +9,8 @@ import streamlit as st
 from preparar_base_pede import carregar_base_unificada
 
 MODEL_PATH = Path(__file__).with_name("modelo_risco.pkl")
+COLUNA_INGLES = "Ingl\u00eas"
+ROTULO_CRITICO = "Cr\u00edtico"
 
 COLUNAS_ENTRADA = [
     "IDA",
@@ -16,7 +18,7 @@ COLUNAS_ENTRADA = [
     "IPV",
     "Matem",
     "Portug",
-    "Inglês",
+    COLUNA_INGLES,
     "IAA",
     "IPS",
     "IAN",
@@ -29,7 +31,7 @@ LIMITES_COLUNAS = {
     "IPV": (0.0, 10.0),
     "Matem": (0.0, 10.0),
     "Portug": (0.0, 10.0),
-    "Inglês": (0.0, 10.0),
+    COLUNA_INGLES: (0.0, 10.0),
     "IAA": (0.0, 10.0),
     "IPS": (0.0, 10.0),
     "IAN": (-10.0, 10.0),
@@ -43,7 +45,7 @@ EXEMPLOS_TEMPLATE = [
         "IPV": 8.0,
         "Matem": 8.0,
         "Portug": 8.0,
-        "Inglês": 8.0,
+        COLUNA_INGLES: 8.0,
         "IAA": 8.0,
         "IPS": 8.0,
         "IAN": 5.0,
@@ -55,7 +57,7 @@ EXEMPLOS_TEMPLATE = [
         "IPV": 3.0,
         "Matem": 3.0,
         "Portug": 3.0,
-        "Inglês": 3.0,
+        COLUNA_INGLES: 3.0,
         "IAA": 3.0,
         "IPS": 3.0,
         "IAN": -2.0,
@@ -67,7 +69,7 @@ EXEMPLOS_TEMPLATE = [
         "IPV": 6.5,
         "Matem": 6.0,
         "Portug": 5.5,
-        "Inglês": 6.0,
+        COLUNA_INGLES: 6.0,
         "IAA": 6.0,
         "IPS": 6.5,
         "IAN": 1.0,
@@ -76,8 +78,8 @@ EXEMPLOS_TEMPLATE = [
 ]
 
 st.set_page_config(
-    page_title="Risco Educacional - Passos Magicos",
-    page_icon="📊",
+    page_title="Risco Educacional - Passos Mágicos",
+    page_icon="\U0001f4ca",
     layout="wide",
 )
 
@@ -96,12 +98,49 @@ def gerar_planilha_modelo() -> bytes:
     return buffer.getvalue()
 
 
+def normalizar_texto(valor):
+    if pd.isna(valor):
+        return pd.NA
+
+    texto = " ".join(str(valor).strip().split())
+    return texto or pd.NA
+
+
+def normalizar_pedra(valor):
+    texto = normalizar_texto(valor)
+    if pd.isna(texto):
+        return pd.NA
+
+    mapa = {
+        "Agata": "\u00c1gata",
+        "\u00c1gata": "\u00c1gata",
+        "Ametista": "Ametista",
+        "Quartzo": "Quartzo",
+        "Top\u00e1zio": "Top\u00e1zio",
+        "INCLUIR": pd.NA,
+    }
+    return mapa.get(texto, texto)
+
+
+def normalizar_fase_ideal(valor):
+    texto = normalizar_texto(valor)
+    if pd.isna(texto):
+        return pd.NA
+
+    return texto.replace("°", "\u00ba")
+
+
 @st.cache_data
 def load_dashboard_data() -> pd.DataFrame:
     df = carregar_base_unificada().copy()
     df["Ano"] = df["Ano Referencia"].astype(str)
-    df["Pedra"] = df["Pedra Atual"]
+    df["Pedra"] = df["Pedra Atual"].apply(normalizar_pedra)
     df["INDE"] = pd.to_numeric(df["INDE Atual"], errors="coerce")
+
+    if "Fase ideal" in df.columns:
+        df["Fase ideal"] = df["Fase ideal"].apply(normalizar_fase_ideal)
+    if "Atingiu PV" in df.columns:
+        df["Atingiu PV"] = df["Atingiu PV"].apply(normalizar_texto)
 
     colunas_numericas = [
         "IAA",
@@ -112,7 +151,7 @@ def load_dashboard_data() -> pd.DataFrame:
         "IAN",
         "Matem",
         "Portug",
-        "Inglês",
+        COLUNA_INGLES,
         "INDE",
         "Defas",
     ]
@@ -122,6 +161,7 @@ def load_dashboard_data() -> pd.DataFrame:
 
     df = df.drop_duplicates(subset=["RA", "Ano"], keep="first")
     df = df.replace(["", "NA", "-"], pd.NA)
+    df = df[df["Pedra"].notna()].copy()
 
     df["Nivel Defasagem"] = pd.cut(
         df["Defas"],
@@ -148,7 +188,7 @@ def classificar_risco(probabilidade: float) -> str:
         return "Moderado"
     if probabilidade < 0.80:
         return "Alto"
-    return "Critico"
+    return ROTULO_CRITICO
 
 
 def preparar_dataframe_para_modelo(
@@ -167,7 +207,7 @@ def validar_e_normalizar_planilha(df: pd.DataFrame) -> pd.DataFrame:
     faltando = [c for c in COLUNAS_ENTRADA if c not in df.columns]
     if faltando:
         st.error("A planilha esta invalida.")
-        st.write("Colunas obrigatorias faltando:")
+        st.write("Colunas obrigatórias faltando:")
         st.write(faltando)
         st.stop()
 
@@ -183,7 +223,7 @@ def validar_e_normalizar_planilha(df: pd.DataFrame) -> pd.DataFrame:
         if linhas_nao_numericas:
             st.error(f"A coluna '{coluna}' deve conter apenas numeros.")
             st.write(
-                "Linhas com valores invalidos (1-based, ate 10):",
+                "Linhas com valores inválidos (1-based, até 10):",
                 [i + 2 for i in linhas_nao_numericas[:10]],
             )
             st.stop()
@@ -192,7 +232,7 @@ def validar_e_normalizar_planilha(df: pd.DataFrame) -> pd.DataFrame:
         if linhas_vazias:
             st.error(f"A coluna '{coluna}' possui valores vazios.")
             st.write(
-                "Linhas com valores ausentes (1-based, ate 10):",
+                "Linhas com valores ausentes (1-based, até 10):",
                 [i + 2 for i in linhas_vazias[:10]],
             )
             st.stop()
@@ -206,7 +246,7 @@ def validar_e_normalizar_planilha(df: pd.DataFrame) -> pd.DataFrame:
                 f"A coluna '{coluna}' deve estar no intervalo de {minimo} a {maximo}."
             )
             st.write(
-                "Linhas fora do intervalo (1-based, ate 10):",
+                "Linhas fora do intervalo (1-based, até 10):",
                 [i + 2 for i in fora_intervalo[:10]],
             )
             st.stop()
@@ -235,12 +275,12 @@ def render_predicao_page() -> None:
 
     feature_names = list(model.feature_names_in_)
 
-    st.title("Predicao de Risco Educacional - Passos Magicos")
+    st.title("Predição de Risco Educacional - Passos Mágicos")
     st.caption(
-        "Sistema de alerta precoce para identificacao de alunos em risco educacional."
+        "Sistema de alerta precoce para identificação de alunos em risco educacional."
     )
 
-    st.header("Analise individual do aluno")
+    st.header("Análise individual do aluno")
 
     with st.sidebar:
         st.header("Entrada manual")
@@ -250,7 +290,7 @@ def render_predicao_page() -> None:
         IPV = st.number_input("IPV", 0.0, 10.0, 6.0, 0.1)
         Matem = st.number_input("Matem", 0.0, 10.0, 6.0, 0.1)
         Portug = st.number_input("Portug", 0.0, 10.0, 6.0, 0.1)
-        Ingles = st.number_input("Inglês", 0.0, 10.0, 6.0, 0.1)
+        Ingles = st.number_input(COLUNA_INGLES, 0.0, 10.0, 6.0, 0.1)
         IAA = st.number_input("IAA", 0.0, 10.0, 6.0, 0.1)
         IPS = st.number_input("IPS", 0.0, 10.0, 6.0, 0.1)
         IAN = st.number_input("IAN", -10.0, 10.0, 0.0, 1.0)
@@ -271,14 +311,14 @@ def render_predicao_page() -> None:
 
         st.subheader("Resultado")
         st.metric("Probabilidade de risco", f"{proba:.1%}")
-        st.metric("Nivel", nivel)
+        st.metric("Nível de risco", nivel)
 
     st.divider()
-    st.header("Analise de turma (upload de planilha)")
-    st.write("### Baixar modelo de preenchimento")
+    st.header("Análise de turma")
+    st.write("### Modelo de preenchimento")
     st.caption(
-        "Baixe uma planilha modelo ja preenchida com exemplos validos. "
-        "Voce pode editar as linhas existentes ou substitui-las pelos seus alunos."
+        "Baixe uma planilha modelo já preenchida com exemplos válidos. "
+        "Você pode editar as linhas existentes ou substituí-las pelos seus alunos."
     )
 
     st.download_button(
@@ -288,7 +328,7 @@ def render_predicao_page() -> None:
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
 
-    st.write("Colunas obrigatorias:")
+    st.write("Colunas obrigatórias:")
     st.code(", ".join(COLUNAS_ENTRADA))
 
     arquivo = st.file_uploader("Enviar planilha (.xlsx)", type=["xlsx"])
@@ -313,7 +353,7 @@ def render_predicao_page() -> None:
             lambda x: f"{x:.1%}"
         )
 
-        st.subheader("Alunos ordenados por risco")
+        st.subheader("Alunos priorizados por risco")
         st.dataframe(df_exibicao, use_container_width=True)
 
         st.download_button(
@@ -328,7 +368,7 @@ def render_dashboard_page() -> None:
     df = load_dashboard_data()
 
     with st.sidebar:
-        st.header("Filtros do dashboard")
+        st.header("Filtros do painel")
         ano_selecionado = st.selectbox(
             "Selecione o ano", ["Todos", "2022", "2023", "2024"]
         )
@@ -336,9 +376,9 @@ def render_dashboard_page() -> None:
     if ano_selecionado != "Todos":
         df = df[df["Ano"] == ano_selecionado]
 
-    st.title("Dashboard Educacional - Passos Magicos")
+    st.title("Painel Analítico Educacional")
     st.caption(
-        "Painel analitico com os indicadores educacionais da base historica "
+        "Painel executivo com os principais indicadores educacionais da base histórica "
         "consolidada de 2022 a 2024."
     )
 
@@ -346,13 +386,13 @@ def render_dashboard_page() -> None:
     col1.metric("Total de alunos", int(df["RA"].nunique()))
     col2.metric("Registros analisados", int(len(df)))
     col3.metric(
-        "INDE medio", f"{df['INDE'].mean():.2f}" if df["INDE"].notna().any() else "-"
+        "INDE médio", f"{df['INDE'].mean():.2f}" if df["INDE"].notna().any() else "-"
     )
-    col4.metric("Engajamento medio", f"{df['IEG'].mean():.2f}")
-    col5.metric("Aprendizagem media", f"{df['IDA'].mean():.2f}")
+    col4.metric("Engajamento médio", f"{df['IEG'].mean():.2f}")
+    col5.metric("Aprendizagem média", f"{df['IDA'].mean():.2f}")
 
     if ano_selecionado == "Todos":
-        st.header("Evolucao dos indicadores ao longo dos anos")
+        st.header("Evolução dos indicadores ao longo dos anos")
         evolucao = (
             df.groupby("Ano", as_index=False)[["IEG", "IPS", "IDA", "IPV", "IAN"]]
             .mean()
@@ -379,25 +419,32 @@ def render_dashboard_page() -> None:
         fig.update_xaxes(type="category")
         st.plotly_chart(fig, use_container_width=True)
 
-    st.header("Distribuicao das pedras")
+    st.header("Distribuição por perfil pedagógico (Pedra)")
+    st.caption("Mostra como os alunos se distribuem entre os perfis pedagógicos da base.")
     st.plotly_chart(px.histogram(df, x="Pedra", color="Pedra"), use_container_width=True)
 
-    st.header("Adequacao ao nivel (IAN)")
+    st.header("Adequação ao nível esperado (IAN)")
+    st.caption("Avalia o quanto o aluno está adequado ao nível esperado para sua etapa.")
     st.plotly_chart(px.histogram(df, x="IAN", color="Pedra"), use_container_width=True)
 
-    st.header("Classificacao de defasagem educacional")
+    st.header("Classificação da defasagem educacional")
+    st.caption("Segmenta os alunos em adiantados, adequados ou defasados.")
     st.plotly_chart(
         px.histogram(df, x="Nivel Defasagem", color="Nivel Defasagem"),
         use_container_width=True,
     )
 
-    st.header("Engajamento vs aprendizagem")
+    st.header("Engajamento x aprendizagem")
+    st.caption("Relaciona o engajamento escolar com o desempenho acadêmico.")
     st.plotly_chart(
         px.scatter(df, x="IEG", y="IDA", color="Pedra", opacity=0.6),
         use_container_width=True,
     )
 
-    st.header("Autoavaliacao vs desempenho")
+    st.header("Autoavaliação x desempenho real")
+    st.caption(
+        "Ajuda a verificar se a percepção do aluno sobre si está coerente com o resultado observado."
+    )
     fig = px.scatter(df, x="IAA", y="IDA", color="Pedra", opacity=0.6)
     fig.add_shape(
         type="line",
@@ -409,18 +456,23 @@ def render_dashboard_page() -> None:
     )
     st.plotly_chart(fig, use_container_width=True)
 
-    st.header("Indicador psicossocial")
+    st.header("Distribuição do indicador psicossocial")
+    st.caption("Compara o IPS entre os diferentes perfis pedagógicos.")
     st.plotly_chart(px.box(df, x="Pedra", y="IPS", color="Pedra"), use_container_width=True)
 
-    st.header("Ponto de virada")
+    st.header("Impacto do ponto de virada no desempenho")
+    st.caption(
+        "Compara o desempenho acadêmico entre alunos que atingiram ou não o ponto de virada."
+    )
     st.plotly_chart(
         px.box(df, x="Atingiu PV", y="IDA", color="Atingiu PV"),
         use_container_width=True,
     )
 
-    st.header("Notas escolares")
+    st.header("Distribuição das notas escolares")
+    st.caption("Resume o comportamento das notas por disciplina.")
     df_notas = df.melt(
-        value_vars=["Matem", "Portug", "Inglês"],
+        value_vars=["Matem", "Portug", COLUNA_INGLES],
         var_name="Disciplina",
         value_name="Nota",
     )
@@ -429,13 +481,17 @@ def render_dashboard_page() -> None:
         use_container_width=True,
     )
 
-    st.header("Score educacional geral")
+    st.header("Distribuição do score educacional")
+    st.caption(
+        "Consolida engajamento, desempenho, psicossocial, ponto de virada e defasagem em um único índice."
+    )
     st.plotly_chart(
         px.histogram(df, x="Score Educacional", color="Pedra"),
         use_container_width=True,
     )
 
-    st.header("Correlacao entre indicadores")
+    st.header("Correlação entre indicadores-chave")
+    st.caption("Mostra como os principais indicadores se relacionam entre si.")
     corr = df[["IEG", "IPS", "IDA", "IPV", "IAN", "IAA"]].corr(numeric_only=True)
     st.plotly_chart(
         px.imshow(corr, text_auto=True, color_continuous_scale="RdBu", aspect="auto"),
@@ -444,10 +500,10 @@ def render_dashboard_page() -> None:
 
 
 with st.sidebar:
-    st.header("Navegacao")
-    pagina = st.radio("Escolha a pagina", ["Predicao de risco", "Dashboard analitico"])
+    st.header("Navegação")
+    pagina = st.radio("Escolha a página", ["Predição de risco", "Painel analítico"])
 
-if pagina == "Predicao de risco":
+if pagina == "Predição de risco":
     render_predicao_page()
 else:
     render_dashboard_page()
