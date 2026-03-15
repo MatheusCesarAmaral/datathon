@@ -5,6 +5,9 @@ import joblib
 import pandas as pd
 import plotly.express as px
 import streamlit as st
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import accuracy_score, classification_report
+from sklearn.model_selection import train_test_split
 
 from preparar_base_pede import carregar_base_unificada
 
@@ -163,19 +166,24 @@ def load_dashboard_data() -> pd.DataFrame:
     df = df.replace(["", "NA", "-"], pd.NA)
     df = df[df["Pedra"].notna()].copy()
 
+    indicadores = ["IAA", "IEG", "IPS", "IDA", "IPV", "IAN"]
+    for col in indicadores:
+        if col in df.columns:
+            df[col] = df[col].clip(0, 10)
+
     df["Nivel Defasagem"] = pd.cut(
-        df["Defas"],
-        bins=[-10, -1, 1, 10],
-        labels=["Adiantado", "Adequado", "Defasado"],
+        df["IAN"],
+        bins=[0, 4, 7, 10],
+        labels=["Alta defasagem", "Defasagem moderada", "Adequado"],
         include_lowest=True,
     )
 
     df["Score Educacional"] = (
         df["IEG"].fillna(0) * 0.2
-        + df["IPS"].fillna(0) * 0.15
+        + df["IPS"].fillna(0) * 0.2
         + df["IDA"].fillna(0) * 0.3
         + df["IPV"].fillna(0) * 0.2
-        + ((10 - df["Defas"].clip(-10, 10).abs()).fillna(0)) * 0.15
+        + df["IAN"].fillna(0) * 0.1
     )
 
     return df
@@ -598,6 +606,90 @@ Essa análise ajuda a compreender como diferentes fatores educacionais se influe
         px.imshow(corr, text_auto=True, color_continuous_scale="RdBu", aspect="auto"),
         use_container_width=True,
     )
+
+    st.header("Previsão de Risco Educacional")
+    st.caption(
+        """ Foi desenvolvido um modelo de **Machine Learning (Random Forest)** para prever o risco educacional dos alunos. 
+
+O modelo utiliza indicadores como **engajamento (IEG), desempenho acadêmico (IDA), fatores psicossociais (IPS) e ponto de virada (IPV)**. 
+
+Com base nesses indicadores, o modelo identifica padrões associados ao risco educacional e permite antecipar alunos que podem apresentar dificuldades de aprendizagem, auxiliando na priorização de intervenções pedagógicas. """
+    )
+    st.caption(
+        """ O modelo apresentou alta acurácia na identificação do risco educacional. 
+Entretanto, é importante considerar que os resultados dependem da definição da variável de risco e da distribuição dos dados no conjunto analisado. """
+    )
+
+    df_ml = df.dropna(subset=["IAN", "IEG", "IPS", "IDA", "IPV"]).copy()
+    if not df_ml.empty and df_ml["RA"].nunique() > 1:
+        df_ml["risco"] = ((df_ml["IAN"] < 5) | (df_ml["IDA"] < 5)).astype(int)
+        features = ["IEG", "IPS", "IDA", "IPV"]
+
+        X = df_ml[features]
+        y = df_ml["risco"]
+
+        if y.nunique() > 1 and len(df_ml) >= 10:
+            X_train, X_test, y_train, y_test = train_test_split(
+                X, y, test_size=0.3, random_state=42
+            )
+
+            model = RandomForestClassifier(
+                class_weight="balanced",
+                random_state=42,
+            )
+            model.fit(X_train, y_train)
+
+            pred = model.predict(X_test)
+            acc = accuracy_score(y_test, pred)
+
+            st.metric("Acurácia do modelo", f"{acc:.2%}")
+            st.text(classification_report(y_test, pred))
+
+            importance = pd.DataFrame(
+                {
+                    "Variável": features,
+                    "Importância": model.feature_importances_,
+                }
+            ).sort_values("Importância", ascending=False)
+
+            fig = px.bar(
+                importance,
+                x="Variável",
+                y="Importância",
+                color="Variável",
+                text="Importância",
+            )
+
+            st.caption(
+                """ O gráfico a seguir mostra a **importância dos indicadores utilizados pelo modelo de Machine Learning para prever o risco educacional**. 
+
+Cada barra representa o quanto um indicador contribui para a capacidade do modelo de identificar alunos em risco.
+Indicadores com maior importância têm maior impacto na previsão e podem ser considerados fatores críticos para monitoramento e intervenção educacional. """
+            )
+
+            fig.update_traces(texttemplate="%{text:.2f}", textposition="outside")
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info(
+                "Não há dados suficientes com duas classes de risco para treinar o modelo no recorte selecionado."
+            )
+    else:
+        st.info("Não há dados suficientes para calcular a previsão de risco neste recorte.")
+
+    st.header("Insights")
+    st.caption(
+        """
+Esta seção apresenta algumas relações observadas entre os indicadores educacionais analisados.
+
+A análise das correlações entre engajamento, fatores psicossociais e desempenho acadêmico ajuda a compreender melhor quais fatores podem estar mais associados ao sucesso educacional dos alunos.
+"""
+    )
+
+    corr1 = df[["IEG", "IDA"]].corr().iloc[0, 1]
+    corr2 = df[["IPS", "IDA"]].corr().iloc[0, 1]
+
+    st.write("Correlação Engajamento x Desempenho:", round(corr1, 2))
+    st.write("Correlação Psicossocial x Desempenho:", round(corr2, 2))
 
 
 with st.sidebar:
