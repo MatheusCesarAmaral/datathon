@@ -1,3 +1,4 @@
+from io import BytesIO
 from pathlib import Path
 
 import joblib
@@ -5,10 +6,7 @@ import pandas as pd
 import streamlit as st
 
 MODEL_PATH = Path(__file__).with_name("modelo_risco.pkl")
-TEMPLATE_PLANILHA_URL = (
-    "https://docs.google.com/spreadsheets/d/"
-    "1td91KoeSgXrUrCVOUkLmONG9Go3LVcXpcNEw_XrL2R0/export?format=xlsx"
-)
+
 COLUNAS_ENTRADA = [
     "IDA",
     "IEG",
@@ -21,6 +19,7 @@ COLUNAS_ENTRADA = [
     "IAN",
     "Defas",
 ]
+
 LIMITES_COLUNAS = {
     "IDA": (0.0, 10.0),
     "IEG": (0.0, 10.0),
@@ -34,12 +33,60 @@ LIMITES_COLUNAS = {
     "Defas": (-10.0, 10.0),
 }
 
-st.set_page_config(page_title="Risco Educacional - Passos Mágicos", layout="wide")
+EXEMPLOS_TEMPLATE = [
+    {
+        "IDA": 8.0,
+        "IEG": 8.0,
+        "IPV": 8.0,
+        "Matem": 8.0,
+        "Portug": 8.0,
+        "Inglês": 8.0,
+        "IAA": 8.0,
+        "IPS": 8.0,
+        "IAN": 5.0,
+        "Defas": 0.0,
+    },
+    {
+        "IDA": 3.0,
+        "IEG": 3.0,
+        "IPV": 3.0,
+        "Matem": 3.0,
+        "Portug": 3.0,
+        "Inglês": 3.0,
+        "IAA": 3.0,
+        "IPS": 3.0,
+        "IAN": -2.0,
+        "Defas": 2.0,
+    },
+    {
+        "IDA": 6.0,
+        "IEG": 5.5,
+        "IPV": 6.5,
+        "Matem": 6.0,
+        "Portug": 5.5,
+        "Inglês": 6.0,
+        "IAA": 6.0,
+        "IPS": 6.5,
+        "IAN": 1.0,
+        "Defas": 0.0,
+    },
+]
+
+st.set_page_config(page_title="Risco Educacional - Passos Magicos", layout="wide")
 
 
 @st.cache_resource
 def load_model():
     return joblib.load(MODEL_PATH)
+
+
+@st.cache_data
+def gerar_planilha_modelo() -> bytes:
+    df_template = pd.DataFrame(EXEMPLOS_TEMPLATE, columns=COLUNAS_ENTRADA)
+    buffer = BytesIO()
+    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+        df_template.to_excel(writer, index=False, sheet_name="modelo")
+    return buffer.getvalue()
 
 
 def classificar_risco(probabilidade: float) -> str:
@@ -49,11 +96,12 @@ def classificar_risco(probabilidade: float) -> str:
         return "Moderado"
     if probabilidade < 0.80:
         return "Alto"
-    return "Crítico"
+    return "Critico"
 
 
-def preparar_dataframe_para_modelo(df_usuario: pd.DataFrame, feature_names) -> pd.DataFrame:
-    """Monta um DataFrame com as colunas esperadas pelo modelo."""
+def preparar_dataframe_para_modelo(
+    df_usuario: pd.DataFrame, feature_names: list[str]
+) -> pd.DataFrame:
     df_modelo = pd.DataFrame(0, index=df_usuario.index, columns=feature_names)
 
     for col in df_usuario.columns:
@@ -66,8 +114,8 @@ def preparar_dataframe_para_modelo(df_usuario: pd.DataFrame, feature_names) -> p
 def validar_e_normalizar_planilha(df: pd.DataFrame) -> pd.DataFrame:
     faltando = [c for c in COLUNAS_ENTRADA if c not in df.columns]
     if faltando:
-        st.error("A planilha está inválida.")
-        st.write("Colunas obrigatórias faltando:")
+        st.error("A planilha esta invalida.")
+        st.write("Colunas obrigatorias faltando:")
         st.write(faltando)
         st.stop()
 
@@ -81,9 +129,9 @@ def validar_e_normalizar_planilha(df: pd.DataFrame) -> pd.DataFrame:
             serie_numerica.isna() & serie_original.notna()
         ].tolist()
         if linhas_nao_numericas:
-            st.error(f"A coluna '{coluna}' deve conter apenas números.")
+            st.error(f"A coluna '{coluna}' deve conter apenas numeros.")
             st.write(
-                "Linhas com valores inválidos (1-based, até 10):",
+                "Linhas com valores invalidos (1-based, ate 10):",
                 [i + 2 for i in linhas_nao_numericas[:10]],
             )
             st.stop()
@@ -92,7 +140,7 @@ def validar_e_normalizar_planilha(df: pd.DataFrame) -> pd.DataFrame:
         if linhas_vazias:
             st.error(f"A coluna '{coluna}' possui valores vazios.")
             st.write(
-                "Linhas com valores ausentes (1-based, até 10):",
+                "Linhas com valores ausentes (1-based, ate 10):",
                 [i + 2 for i in linhas_vazias[:10]],
             )
             st.stop()
@@ -106,7 +154,7 @@ def validar_e_normalizar_planilha(df: pd.DataFrame) -> pd.DataFrame:
                 f"A coluna '{coluna}' deve estar no intervalo de {minimo} a {maximo}."
             )
             st.write(
-                "Linhas fora do intervalo (1-based, até 10):",
+                "Linhas fora do intervalo (1-based, ate 10):",
                 [i + 2 for i in fora_intervalo[:10]],
             )
             st.stop()
@@ -119,29 +167,25 @@ def validar_e_normalizar_planilha(df: pd.DataFrame) -> pd.DataFrame:
 try:
     model = load_model()
 except Exception as exc:
-    st.error("Não foi possível carregar o modelo de risco.")
+    st.error("Nao foi possivel carregar o modelo de risco.")
     st.code(f"Arquivo esperado: {MODEL_PATH}")
     st.exception(exc)
     st.stop()
 
 if not hasattr(model, "feature_names_in_"):
-    st.error("O modelo carregado não possui 'feature_names_in_'.")
+    st.error("O modelo carregado nao possui 'feature_names_in_'.")
     st.stop()
 
 feature_names = list(model.feature_names_in_)
 
 if not hasattr(model, "predict_proba"):
-    st.error("O modelo carregado não suporta 'predict_proba'.")
+    st.error("O modelo carregado nao suporta 'predict_proba'.")
     st.stop()
 
-# ---------------- TÍTULO ----------------
+st.title("Predicao de Risco Educacional - Passos Magicos")
+st.caption("Sistema de alerta precoce para identificacao de alunos em risco educacional.")
 
-st.title("📊 Predição de Risco Educacional — Passos Mágicos")
-st.caption("Sistema de alerta precoce para identificação de alunos em risco educacional.")
-
-# ---------------- PREVISÃO INDIVIDUAL ----------------
-
-st.header("Análise individual do aluno")
+st.header("Analise individual do aluno")
 
 with st.sidebar:
     st.header("Entrada manual")
@@ -158,7 +202,7 @@ with st.sidebar:
     Defas = st.number_input("Defas", -10.0, 10.0, 0.0, 1.0)
 
     st.divider()
-    analisar = st.button("🔮 Calcular risco")
+    analisar = st.button("Calcular risco")
 
 if analisar:
     entrada = pd.DataFrame(
@@ -172,20 +216,26 @@ if analisar:
 
     st.subheader("Resultado")
     st.metric("Probabilidade de risco", f"{proba:.1%}")
-    st.metric("Nível", nivel)
-
-# ---------------- PREVISÃO EM LOTE ----------------
+    st.metric("Nivel", nivel)
 
 st.divider()
-st.header("📁 Análise de turma (upload de planilha)")
+st.header("Analise de turma (upload de planilha)")
 
-st.write("### 📥 Baixar modelo de preenchimento")
-st.caption("Baixe a planilha modelo em .xlsx, preencha os dados e envie no campo abaixo.")
+st.write("### Baixar modelo de preenchimento")
+st.caption(
+    "Baixe uma planilha modelo ja preenchida com exemplos validos. "
+    "Voce pode editar as linhas existentes ou substitui-las pelos seus alunos."
+)
 
-if hasattr(st, "link_button"):
-    st.link_button("Baixar planilha modelo (.xlsx)", TEMPLATE_PLANILHA_URL)
-else:
-    st.markdown(f"[Baixar planilha modelo (.xlsx)]({TEMPLATE_PLANILHA_URL})")
+st.download_button(
+    label="Baixar planilha modelo (.xlsx)",
+    data=gerar_planilha_modelo(),
+    file_name="template_predicao_risco.xlsx",
+    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+)
+
+st.write("Colunas obrigatorias:")
+st.code(", ".join(COLUNAS_ENTRADA))
 
 arquivo = st.file_uploader("Enviar planilha (.xlsx)", type=["xlsx"])
 
@@ -193,7 +243,7 @@ if arquivo:
     try:
         df = pd.read_excel(arquivo)
     except Exception as exc:
-        st.error("Não foi possível ler a planilha enviada.")
+        st.error("Nao foi possivel ler a planilha enviada.")
         st.exception(exc)
         st.stop()
 
@@ -209,7 +259,7 @@ if arquivo:
     st.dataframe(df, use_container_width=True)
 
     st.download_button(
-        label="⬇️ Baixar resultado",
+        label="Baixar resultado",
         data=df.to_csv(index=False).encode("utf-8-sig"),
         file_name="resultado_risco_alunos.csv",
         mime="text/csv",
