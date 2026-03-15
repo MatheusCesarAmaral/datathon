@@ -1,4 +1,4 @@
-from pathlib import Path
+﻿from pathlib import Path
 
 import pandas as pd
 
@@ -72,3 +72,4 @@ def carregar_base_unificada(caminho: Path | str = ARQUIVO_PADRAO) -> pd.DataFram
     base = base.loc[:, ~base.columns.duplicated()].copy()
 
     return base
+
