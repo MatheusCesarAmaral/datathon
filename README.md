@@ -6,6 +6,7 @@ Aplicacao e notebook para analise de risco educacional a partir da base PEDE, co
 
 - Notebook de analise e treinamento do modelo.
 - Aplicacao Streamlit para previsao individual e em lote.
+- Dashboard analitico com exploracao dos indicadores educacionais.
 - Modelo final treinado com as mesmas variaveis exigidas no app.
 
 ## Estrutura
@@ -13,7 +14,7 @@ Aplicacao e notebook para analise de risco educacional a partir da base PEDE, co
 - `scripts/analise_datathon.ipynb`: notebook principal de exploracao, analise e treinamento.
 - `scripts/preparar_base_pede.py`: leitura e padronizacao das abas `PEDE2022`, `PEDE2023` e `PEDE2024`.
 - `scripts/retrain_model.py`: retreino do modelo final com as 10 features do app.
-- `scripts/app.py`: aplicação Streamlit.
+- `scripts/app.py`: aplicacao Streamlit.
 - `scripts/modelo_risco.pkl`: modelo treinado usado pela aplicacao.
 - `scripts/requirements.txt`: dependencias do projeto.
 - `data/BASE DE DADOS PEDE - DATATHON.xlsx`: base original com 3 abas.
@@ -53,29 +54,36 @@ Isso evita desalinhamento entre o que o modelo consome no treino e o que a aplic
 
 ## Requisitos
 
-- Python `3.11+`
+- Python `3.11` `64-bit`
 - Ambiente virtual recomendado
 
-## Instalação
+Observacoes:
 
-Na raiz do projeto:
+- Para este projeto, use preferencialmente `Python 3.11 64-bit`.
+- Versoes mais novas, como `3.14`, podem falhar na instalacao do `pandas==2.2.3` no Windows.
 
-```bash
-python -m venv .venv
-```
+## Instalacao
 
-Ative o ambiente virtual.
+No Windows PowerShell, na raiz do projeto:
 
-PowerShell:
-
-```bash
-.venv\Scripts\Activate.ps1
-```
-
-Depois instale as dependencias:
-
-```bash
+```powershell
+py -3.11-64 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python --version
+python -c "import struct; print(struct.calcsize('P') * 8)"
+python -m pip install --upgrade pip
 pip install -r scripts/requirements.txt
+```
+
+O esperado e:
+
+- `Python 3.11.x`
+- arquitetura `64`
+
+Se quiser confirmar quais versoes do Python estao instaladas na maquina:
+
+```powershell
+py -0p
 ```
 
 ## Como executar o notebook
@@ -99,8 +107,8 @@ O notebook cobre:
 
 Depois de ativar o ambiente:
 
-```bash
-.venv\Scripts\python.exe scripts/retrain_model.py
+```powershell
+.\.venv\Scripts\python.exe scripts/retrain_model.py
 ```
 
 Esse script:
@@ -115,7 +123,7 @@ Esse script:
 
 Na raiz do projeto:
 
-```bash
+```powershell
 streamlit run scripts/app.py
 ```
 
@@ -139,7 +147,7 @@ A aplicacao aceita as seguintes variaveis:
 ### Upload de planilha
 
 1. Baixe a planilha modelo no proprio app.
-2. Preencha as 10 colunas obrigatórias.
+2. Preencha as 10 colunas obrigatorias.
 3. Envie a planilha `.xlsx`.
 4. Baixe o resultado com a probabilidade e o nivel de risco.
 
@@ -154,3 +162,4 @@ A aplicacao aceita as seguintes variaveis:
 - A base consolidada tem dados dos anos `2022`, `2023` e `2024`.
 - O modelo final esta alinhado com o app.
 - A variavel `Ingles` possui muitos valores ausentes na base original, entao a amostra efetiva do treino e menor que o total de linhas consolidadas.
+- Se a instalacao das dependencias falhar ao tentar compilar `pandas`, revise se a venv foi criada com `Python 3.11 64-bit`.
